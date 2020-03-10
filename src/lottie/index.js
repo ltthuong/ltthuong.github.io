@@ -12,14 +12,10 @@ const defaultOptions = {
 };
 
 class LottieControl extends React.Component {
-  constructor(props) {
-    super(props);
-  }
-
   render() {
     return (
       <div>
-        <Lottie options={defaultOptions} height={window.innerHeight}/>
+        <Lottie options={defaultOptions} height={window.innerHeight} />
       </div>
     );
   }

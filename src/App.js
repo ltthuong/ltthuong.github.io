@@ -1,5 +1,5 @@
 import React from 'react';
-import LottieControl from './LottieControl';
+import LottieControl from './lottie';
 
 function App() {
   return (
