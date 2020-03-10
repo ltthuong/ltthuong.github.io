@@ -1,5 +1,5 @@
 {
-  "homepage": "https://letienthuong.github.io",
+  "homepage": "http://letienthuong.github.io/ltt",
   "name": "letienthuong.github.io",
   "version": "0.1.0",
   "private": true,
@@ -14,6 +14,9 @@
     "react-lottie": "^1.2.3",
     "react-router-dom": "^5.1.2",
     "react-scripts": "3.4.0"
+  },
+  "devDependencies": {
+    "gh-pages": "^2.2.0"
   },
   "scripts": {
     "predeploy": "yarn run build",
