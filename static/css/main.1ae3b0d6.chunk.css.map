@@ -1,0 +1,1 @@
+{"version":3,"sources":["stylesheet.scss"],"names":[],"mappings":"AAAA,KACE,QAAA,CACA,SAAA,CACA,QAAA,CACA,cAAA,CACA,YAAA,CACA,sBAAA","file":"main.1ae3b0d6.chunk.css","sourcesContent":["body {\n  margin: 0;\n  padding: 0;\n  border: 0;\n  font-size: 100%;\n  font: inherit;\n  vertical-align: baseline;\n}\n"]}
