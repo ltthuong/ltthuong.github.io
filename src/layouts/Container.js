@@ -11,9 +11,6 @@ function Container() {
   return (
     <>
       <ReactFullpage
-        //fullpage options
-        // licenseKey = {'YOUR_KEY_HERE'}
-        scrollingSpeed={1000} /* Options here */
         menu
         anchors={anchors}
         navigation
