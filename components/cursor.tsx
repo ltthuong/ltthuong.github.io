@@ -30,8 +30,16 @@ export function Cursor() {
       rx += (x - rx) * 0.14;
       ry += (y - ry) * 0.14;
       scale += (target - scale) * 0.2;
-      d.style.transform = `translate3d(${dx}px, ${dy}px, 0) translate(-50%, -50%)`;
-      r.style.transform = `translate3d(${rx}px, ${ry}px, 0) translate(-50%, -50%) scale(${scale})`;
+      // the ring stretches along its lag vector, like a droplet in motion
+      const lx = x - rx;
+      const ly = y - ry;
+      const lag = Math.hypot(lx, ly);
+      const stretch = Math.min(lag * 0.014, 0.85);
+      const ang = Math.atan2(ly, lx);
+      d.style.transform = `translate3d(${dx}px, ${dy}px, 0) translate(-50%, -50%) scale(${1 + stretch * 0.6})`;
+      r.style.transform =
+        `translate3d(${rx}px, ${ry}px, 0) translate(-50%, -50%) ` +
+        `rotate(${ang}rad) scale(${(1 + stretch) * scale}, ${Math.max(0.55, 1 - stretch * 0.4) * scale})`;
       raf = requestAnimationFrame(tick);
     };
 

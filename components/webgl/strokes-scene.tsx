@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 
@@ -103,11 +103,15 @@ const strokeVert = /* glsl */ `
   uniform float uTime;
   uniform vec2 uPointer;
   uniform vec2 uPointerW;
+  uniform vec2 uPointerVel;
+  uniform float uBurstT;
+  uniform vec2 uBurstPos;
   varying float vU;
   varying float vV;
   varying vec4 vRand;
   varying float vDepth;
   varying vec3 vWorld;
+  varying float vHeat;
 
   void main() {
     vU = aU; vV = aV; vRand = aRand;
@@ -130,12 +134,27 @@ const strokeVert = /* glsl */ `
     float depthK = clamp((world.z + 6.0) / 8.0, 0.0, 1.0);
     world.xy += uPointer * (0.12 + depthK * 0.35);
 
-    // cursor shoves nearby strokes aside (the v2 swipe feel)
+    // cursor: radial shove + velocity brushing + click shockwave
     vec2 dp = world.xy - uPointerW;
-    float pd2 = dot(dp, dp);
-    float push = exp(-pd2 * 0.30) * (0.55 + vRand.y * 0.6);
-    world.xy += (dp / (sqrt(pd2) + 0.001)) * push;
+    float pd = length(dp) + 0.001;
+    float prox = exp(-pd * pd * 0.30);
+    float push = prox * (0.55 + vRand.y * 0.6);
+    world.xy += (dp / pd) * push;
     world.z += push * 0.25;
+
+    // fast swipes drag strokes along with the hand
+    world.xy += uPointerVel * prox * (0.9 + vRand.x * 0.9);
+
+    // expanding ring impulse from the last click
+    float bt = uTime - uBurstT;
+    vec2 bp = world.xy - uBurstPos;
+    float bd = length(bp) + 0.001;
+    float ring = bt * 7.5;
+    float wave = exp(-pow(bd - ring, 2.0) * 2.0) * exp(-bt * 2.4) * step(0.0, bt);
+    world.xy += (bp / bd) * wave * (1.3 + vRand.y * 0.9);
+    world.z += wave * 0.5;
+
+    vHeat = clamp(push * 1.1 + wave * 1.5 + length(uPointerVel) * prox * 1.3, 0.0, 1.0);
 
     vWorld = world;
     vec4 mv = modelViewMatrix * vec4(world, 1.0);
@@ -151,6 +170,7 @@ const strokeFrag = /* glsl */ `
   varying vec4 vRand;
   varying float vDepth;
   varying vec3 vWorld;
+  varying float vHeat;
   uniform vec3 uGlowPos;
 
   void main() {
@@ -166,7 +186,11 @@ const strokeFrag = /* glsl */ `
     float g = exp(-distance(vWorld, uGlowPos) * 0.5);
     col += vec3(0.95, 0.14, 0.2) * g * 0.7;
 
+    // disturbed strokes run white-hot
+    col = mix(col, vec3(1.0, 0.52, 0.45), vHeat * 0.7);
+
     float alpha = endTaper * edge * fogFade * (0.68 + vRand.z * 0.32);
+    alpha *= 1.0 + vHeat * 0.6;
     gl_FragColor = vec4(col, alpha);
   }
 `;
@@ -176,6 +200,7 @@ const fogFrag = /* glsl */ `
   precision highp float;
   varying vec2 vUv;
   uniform float uTime;
+  uniform float uBurstT;
 
   float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
   float noise(vec2 p) {
@@ -214,6 +239,10 @@ const fogFrag = /* glsl */ `
     float v = smoothstep(1.25, 0.35, distance(uv, vec2(0.5)));
     col *= 0.55 + v * 0.45;
 
+    // click flash — the whole room breathes red for a beat
+    float bt = uTime - uBurstT;
+    col += vec3(0.30, 0.03, 0.09) * exp(-bt * 3.2) * step(0.0, bt);
+
     gl_FragColor = vec4(col, 1.0);
   }
 `;
@@ -226,12 +255,17 @@ const fogVert = /* glsl */ `
   }
 `;
 
-function Backdrop() {
+function Backdrop({ burst }: { burst: React.MutableRefObject<BurstRef> }) {
   const mat = useRef<THREE.ShaderMaterial>(null);
   const { viewport } = useThree();
-  const uniforms = useMemo(() => ({ uTime: { value: 0 } }), []);
+  const uniforms = useMemo(
+    () => ({ uTime: { value: 0 }, uBurstT: { value: -100 } }),
+    [],
+  );
   useFrame((state) => {
-    if (mat.current) mat.current.uniforms.uTime.value = state.clock.elapsedTime;
+    if (!mat.current) return;
+    mat.current.uniforms.uTime.value = state.clock.elapsedTime;
+    mat.current.uniforms.uBurstT.value = burst.current.t;
   });
   // plane far behind, scaled to overfill the frustum
   const dist = 10 + 8; // camera z − plane z
@@ -251,32 +285,61 @@ function Backdrop() {
   );
 }
 
-function Strokes() {
+interface BurstRef {
+  t: number; // burst start, in scene clock seconds
+  now: number; // latest scene clock, kept fresh each frame
+  x: number; // live pointer (world)
+  y: number;
+  bx: number; // frozen click position (world)
+  by: number;
+}
+
+function Strokes({ burst }: { burst: React.MutableRefObject<BurstRef> }) {
   const mat = useRef<THREE.ShaderMaterial>(null);
   const geo = useMemo(() => buildStrokes(), []);
+  const prevPW = useRef(new THREE.Vector2(50, 50));
   const uniforms = useMemo(
     () => ({
       uTime: { value: 0 },
       uPointer: { value: new THREE.Vector2() },
       uPointerW: { value: new THREE.Vector2(50, 50) },
+      uPointerVel: { value: new THREE.Vector2() },
+      uBurstT: { value: -100 },
+      uBurstPos: { value: new THREE.Vector2() },
       uGlowPos: { value: new THREE.Vector3(2.6, 0.4, -2.5) },
     }),
     [],
   );
-  useFrame((state) => {
+  useFrame((state, delta) => {
     if (!mat.current) return;
-    mat.current.uniforms.uTime.value = state.clock.elapsedTime;
-    (mat.current.uniforms.uPointer.value as THREE.Vector2).lerp(
-      state.pointer,
-      0.05,
-    );
-    (mat.current.uniforms.uPointerW.value as THREE.Vector2).lerp(
+    const u = mat.current.uniforms;
+    u.uTime.value = state.clock.elapsedTime;
+    (u.uPointer.value as THREE.Vector2).lerp(state.pointer, 0.05);
+
+    const pw = u.uPointerW.value as THREE.Vector2;
+    prevPW.current.copy(pw);
+    pw.lerp(
       {
         x: (state.pointer.x * state.viewport.width) / 2,
         y: (state.pointer.y * state.viewport.height) / 2,
       } as THREE.Vector2,
-      0.09,
+      0.12,
     );
+    // swipe velocity (world units/s), smoothed + capped
+    const vel = u.uPointerVel.value as THREE.Vector2;
+    const dt = Math.max(delta, 1e-3);
+    vel.lerp(
+      { x: (pw.x - prevPW.current.x) / dt, y: (pw.y - prevPW.current.y) / dt } as THREE.Vector2,
+      0.18,
+    );
+    if (vel.length() > 2.6) vel.setLength(2.6);
+
+    // burst bookkeeping: expose clock + pointer to the DOM listener, read back its clicks
+    burst.current.now = state.clock.elapsedTime;
+    burst.current.x = pw.x;
+    burst.current.y = pw.y;
+    u.uBurstT.value = burst.current.t;
+    (u.uBurstPos.value as THREE.Vector2).set(burst.current.bx, burst.current.by);
   });
   return (
     <mesh geometry={geo}>
@@ -305,6 +368,19 @@ function Rig() {
 }
 
 export function StrokesScene({ active = true }: { active?: boolean }) {
+  const burst = useRef<BurstRef>({ t: -100, now: 0, x: 0, y: 0, bx: 0, by: 0 });
+
+  useEffect(() => {
+    const down = () => {
+      const b = burst.current;
+      b.t = b.now;
+      b.bx = b.x;
+      b.by = b.y;
+    };
+    window.addEventListener("pointerdown", down);
+    return () => window.removeEventListener("pointerdown", down);
+  }, []);
+
   return (
     <Canvas
       camera={{ position: [0, 0, 10], fov: 45 }}
@@ -316,8 +392,8 @@ export function StrokesScene({ active = true }: { active?: boolean }) {
       }}
       frameloop={active ? "always" : "never"}
     >
-      <Backdrop />
-      <Strokes />
+      <Backdrop burst={burst} />
+      <Strokes burst={burst} />
       <Rig />
     </Canvas>
   );
