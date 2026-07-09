@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+/* ── Design tokens ─────────────────────────────────────────── */
+@theme {
+  --color-bg: #050506;
+  --color-surface: #0b0c10;
+  --color-ink: #f3f1ec;
+  --color-muted: #97958c;
+  --color-faint: #605f59;
+  --color-accent: #6b7bff;
+  --color-accent-2: #e7d3ff;
+  --color-line: rgba(243, 241, 236, 0.1);
+
+  --ease-lux: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Fonts wired to next/font CSS variables at runtime */
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-fraunces);
+}
+
+/* ── Base ──────────────────────────────────────────────────── */
+:root {
+  color-scheme: dark;
+}
+
+html {
+  scroll-padding-top: 5.5rem;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+
+::selection {
+  background: var(--color-accent);
+  color: #050506;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(243, 241, 236, 0.12);
+  border-radius: 99px;
+}
+
+/* ── Film grain (fixed, cheap, non-interactive) ────────────── */
+.grain {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0.045;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 240 240' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 220px 220px;
+}
+
+/* ── Name reveal ───────────────────────────────────────────── */
+@keyframes name-in {
+  from {
+    opacity: 0;
+    filter: blur(16px);
+    transform: translateY(26px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0);
+  }
+}
+.name-in {
+  animation: name-in 1.7s cubic-bezier(0.32, 0.72, 0, 1) 0.35s both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .name-in {
+    animation: none;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}

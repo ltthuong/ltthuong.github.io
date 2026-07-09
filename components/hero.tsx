@@ -1,0 +1,38 @@
+"use client";
+
+import dynamic from "next/dynamic";
+import { useEffect, useState } from "react";
+
+const StrokesScene = dynamic(
+  () => import("@/components/webgl/strokes-scene").then((m) => m.StrokesScene),
+  { ssr: false },
+);
+
+export function Hero() {
+  const [reduced, setReduced] = useState(false);
+
+  useEffect(() => {
+    setReduced(window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  }, []);
+
+  return (
+    <section className="relative h-[100dvh] w-full overflow-hidden bg-[#150a1f]">
+      <div className="absolute inset-0">
+        {reduced ? <StaticGlow /> : <StrokesScene active />}
+      </div>
+
+      {/* the name IS the headline — v2.lusion.co composition */}
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <h1 className="name-in font-display text-[clamp(4rem,14vw,11rem)] font-normal leading-none tracking-[-0.01em] text-[#f5f0ea] [text-shadow:0_0_70px_rgba(255,45,80,0.35)]">
+          Thưởng
+        </h1>
+      </div>
+    </section>
+  );
+}
+
+function StaticGlow() {
+  return (
+    <div className="absolute inset-0 bg-[radial-gradient(80%_70%_at_62%_50%,rgba(160,20,50,0.35),rgba(21,10,31,0)_65%)]" />
+  );
+}
