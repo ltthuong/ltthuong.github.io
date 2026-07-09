@@ -65,25 +65,44 @@ body {
   background-size: 220px 220px;
 }
 
-/* ── Name reveal ───────────────────────────────────────────── */
-@keyframes name-in {
+/* ── Name: per-letter reveal + breathing glow ──────────────── */
+@keyframes letter-in {
   from {
     opacity: 0;
-    filter: blur(16px);
-    transform: translateY(26px);
+    filter: blur(14px);
+    translate: 0 0.35em;
   }
   to {
     opacity: 1;
     filter: blur(0);
-    transform: translateY(0);
+    translate: 0 0;
   }
 }
-.name-in {
-  animation: name-in 1.7s cubic-bezier(0.32, 0.72, 0, 1) 0.35s both;
+.letter-in {
+  animation: letter-in 1.1s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+
+@keyframes glow-breathe {
+  from {
+    text-shadow: 0 0 60px rgba(255, 45, 80, 0.28);
+  }
+  to {
+    text-shadow: 0 0 95px rgba(255, 45, 80, 0.55);
+  }
+}
+.name-glow {
+  animation: glow-breathe 4.5s ease-in-out infinite alternate;
+}
+
+/* ── Custom cursor ─────────────────────────────────────────── */
+body.custom-cursor,
+body.custom-cursor * {
+  cursor: none !important;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .name-in {
+  .letter-in,
+  .name-glow {
     animation: none;
   }
   html {

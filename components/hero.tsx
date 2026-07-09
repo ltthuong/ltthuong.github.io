@@ -2,6 +2,8 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
+import { NameTitle } from "@/components/name-title";
+import { Cursor } from "@/components/cursor";
 
 const StrokesScene = dynamic(
   () => import("@/components/webgl/strokes-scene").then((m) => m.StrokesScene),
@@ -23,10 +25,10 @@ export function Hero() {
 
       {/* the name IS the headline — v2.lusion.co composition */}
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-        <h1 className="name-in font-display text-[clamp(4rem,14vw,11rem)] font-normal leading-none tracking-[-0.01em] text-[#f5f0ea] [text-shadow:0_0_70px_rgba(255,45,80,0.35)]">
-          Thưởng
-        </h1>
+        <NameTitle />
       </div>
+
+      <Cursor />
     </section>
   );
 }
