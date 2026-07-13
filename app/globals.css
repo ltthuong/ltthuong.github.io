@@ -65,21 +65,60 @@ body {
   background-size: 220px 220px;
 }
 
-/* ── Name: per-letter reveal + breathing glow ──────────────── */
+/* ── Name: per-letter reveal + shimmer + outline mix ───────── */
 @keyframes letter-in {
   from {
     opacity: 0;
     filter: blur(14px);
-    translate: 0 0.35em;
+    translate: 0 0.4em;
+    rotate: -14deg;
+    scale: 0.75;
   }
   to {
     opacity: 1;
     filter: blur(0);
     translate: 0 0;
+    rotate: 0deg;
+    scale: 1;
+  }
+}
+@keyframes shimmer {
+  from {
+    background-position: 130% 0;
+  }
+  to {
+    background-position: -130% 0;
   }
 }
 .letter-in {
   animation: letter-in 1.1s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+.letter-fill {
+  background: linear-gradient(
+    110deg,
+    #f5f0ea 30%,
+    #ffffff 45%,
+    #ffc2cc 52%,
+    #f5f0ea 62%
+  );
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.letter-in.letter-fill {
+  animation:
+    letter-in 1.1s cubic-bezier(0.32, 0.72, 0, 1) both,
+    shimmer 5.5s linear infinite;
+}
+.letter-outline {
+  -webkit-text-stroke: 2.5px rgba(245, 240, 234, 0.92);
+  color: transparent;
+}
+@media (max-width: 768px) {
+  .letter-outline {
+    -webkit-text-stroke-width: 1.5px;
+  }
 }
 
 @keyframes glow-breathe {

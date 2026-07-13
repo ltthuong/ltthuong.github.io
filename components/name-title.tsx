@@ -3,19 +3,21 @@
 import { useEffect, useRef } from "react";
 
 const NAME = Array.from("Thưởng");
+// fill = gradient shimmer, outline = hollow italic — the editorial mix
+const STYLE: ("fill" | "outline")[] = ["fill", "fill", "outline", "fill", "outline", "fill"];
+
 const INFLUENCE = 260; // px radius the cursor bends letters within
 const SHOVE = 74; // max px displacement
 const K = 110; // spring stiffness
 const DAMP = 7.2; // spring damping (lower = wobblier)
 
-/* The name reveals letter by letter, then behaves like six masses on
-   springs: the cursor shoves them, clicks blast them apart, and they
-   wobble back home with real inertia. */
+/* Six masses on springs wearing serif glyphs: they ride a traveling wave,
+   lean away from the cursor, blast apart on click, shiver on their own,
+   and split into RGB ghosts whenever they move fast. */
 export function NameTitle() {
   const wrap = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
-    if (!window.matchMedia("(pointer: fine)").matches) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
     const letters = Array.from(
@@ -36,10 +38,11 @@ export function NameTitle() {
     const S = letters.map(() => ({ x: 0, y: 0, vx: 0, vy: 0 }));
     let raf = 0;
     let last = performance.now();
+    let nextShiver = -1;
 
     const move = (e: PointerEvent) => { mx = e.clientX; my = e.clientY; };
 
-    // click: blast every letter away from the click point
+    // click/tap: blast every letter away from the hit point
     const down = (e: PointerEvent) => {
       if (!centers.length) measure();
       for (let i = 0; i < S.length; i++) {
@@ -59,12 +62,22 @@ export function NameTitle() {
       last = now;
       const tt = now / 1000;
 
+      // every few seconds the whole name shivers awake
+      if (nextShiver < 0) nextShiver = tt + 4 + Math.random() * 3;
+      if (tt > nextShiver) {
+        nextShiver = tt + 5 + Math.random() * 4;
+        for (const s of S) {
+          s.vx += (Math.random() - 0.5) * 300;
+          s.vy += (Math.random() - 0.5) * 240;
+        }
+      }
+
       for (let i = 0; i < letters.length; i++) {
         const c = centers[i];
         const s = S[i];
-        // rest target: gentle idle bob so the name is never frozen
-        let tx = Math.sin(tt * 0.9 + i * 1.15) * 4;
-        let ty = Math.cos(tt * 0.7 + i * 0.9) * 5;
+        // rest target: a traveling wave, letters surfing left to right
+        let tx = Math.sin(tt * 1.15 - i * 0.55) * 9;
+        let ty = Math.sin(tt * 0.85 - i * 0.45 + 1.3) * 9;
         if (c) {
           const ddx = c.x - mx;
           const ddy = c.y - my;
@@ -84,11 +97,21 @@ export function NameTitle() {
         s.x += s.vx * dt;
         s.y += s.vy * dt;
 
-        const rot = Math.max(-16, Math.min(16, s.vx * 0.035));
+        const waveRot = Math.sin(tt * 0.9 - i * 0.5) * 2.4;
+        const rot = waveRot + Math.max(-16, Math.min(16, s.vx * 0.035));
+        const skew = Math.max(-10, Math.min(10, -s.vx * 0.02));
         const speed = Math.hypot(s.vx, s.vy);
         const scale = 1 + Math.min(speed * 0.00045, 0.14);
         letters[i].style.transform =
-          `translate3d(${s.x}px, ${s.y}px, 0) rotate(${rot}deg) scale(${scale})`;
+          `translate3d(${s.x}px, ${s.y}px, 0) rotate(${rot}deg) skewX(${skew}deg) scale(${scale})`;
+
+        // chromatic split: ghosts trail opposite the velocity
+        const cx = Math.max(-16, Math.min(16, s.vx * 0.04));
+        const cy = Math.max(-16, Math.min(16, s.vy * 0.04));
+        letters[i].style.textShadow =
+          `${-cx}px ${-cy}px 0 rgba(255, 40, 70, 0.5), ` +
+          `${cx}px ${cy}px 0 rgba(96, 140, 255, 0.38), ` +
+          `0 0 70px rgba(255, 45, 80, 0.33)`;
       }
       raf = requestAnimationFrame(tick);
     };
@@ -114,7 +137,9 @@ export function NameTitle() {
         <span
           key={i}
           data-letter
-          className="letter-in inline-block will-change-transform"
+          className={`letter-in inline-block will-change-transform ${
+            STYLE[i] === "outline" ? "letter-outline italic" : "letter-fill"
+          }`}
           style={{ animationDelay: `${0.35 + i * 0.07}s` }}
         >
           {ch}
