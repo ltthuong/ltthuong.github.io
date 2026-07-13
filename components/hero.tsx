@@ -24,8 +24,11 @@ export function Hero() {
       </div>
 
       {/* the name IS the headline — v2.lusion.co composition */}
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-6">
         <NameTitle />
+        <p className="sub-in font-mono text-xs tracking-[0.22em] text-[#f5f0ea]/55 md:text-sm">
+          /tʰɨə̯ŋ/ — means &ldquo;reward&rdquo;
+        </p>
       </div>
 
       <Cursor />
