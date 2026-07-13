@@ -367,6 +367,235 @@ function Rig() {
   return null;
 }
 
+/* ── THƯỞNG, written in ~22k particles ──────────────────────── */
+/* Glyph shapes come from rasterizing the real Fraunces webfont on a 2D
+   canvas, so Vietnamese diacritics are pixel-perfect. Particles spring
+   home, the pointer blows them aside, clicks blast them apart. */
+
+const NAME_TEXT = "THƯỞNG";
+const NAME_W = 11; // world units the name spans when fully fit
+
+function sampleName(count: number): Float32Array {
+  const W = 1400;
+  const H = 460;
+  const cv = document.createElement("canvas");
+  cv.width = W;
+  cv.height = H;
+  const ctx = cv.getContext("2d", { willReadFrequently: true })!;
+  const family = `Fraunces, Georgia, "Times New Roman", serif`;
+  let size = 250;
+  ctx.font = `600 ${size}px ${family}`;
+  const measured = ctx.measureText(NAME_TEXT).width;
+  size = Math.min(250, Math.floor((size * W * 0.94) / Math.max(measured, 1)));
+  ctx.font = `600 ${size}px ${family}`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#fff";
+  ctx.fillText(NAME_TEXT, W / 2, H / 2 + size * 0.1); // nudge for diacritic headroom
+
+  const img = ctx.getImageData(0, 0, W, H).data;
+  const filled: number[] = [];
+  for (let y = 0; y < H; y += 2)
+    for (let x = 0; x < W; x += 2)
+      if (img[(y * W + x) * 4 + 3] > 120) filled.push(x, y);
+
+  const out = new Float32Array(count * 3);
+  const S = NAME_W / W;
+  const n = filled.length / 2;
+  for (let i = 0; i < count; i++) {
+    const j = ((Math.random() * n) | 0) * 2;
+    out[i * 3] = (filled[j] - W / 2) * S + (Math.random() - 0.5) * 0.012;
+    out[i * 3 + 1] = (H / 2 - filled[j + 1]) * S + (Math.random() - 0.5) * 0.012;
+    out[i * 3 + 2] = (Math.random() - 0.5) * 0.3;
+  }
+  return out;
+}
+
+const nameVert = /* glsl */ `
+  attribute float aSpeed;
+  uniform float uScale;
+  uniform float uSize;
+  varying float vSpeed;
+  void main() {
+    vSpeed = aSpeed;
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    gl_PointSize = uSize * uScale / -mv.z;
+    gl_Position = projectionMatrix * mv;
+  }
+`;
+
+const nameFrag = /* glsl */ `
+  uniform vec3 uColA;
+  uniform vec3 uColB;
+  varying float vSpeed;
+  void main() {
+    float d = length(gl_PointCoord - 0.5);
+    float alpha = smoothstep(0.5, 0.12, d);
+    vec3 col = mix(uColA, uColB, clamp(vSpeed, 0.0, 1.0));
+    col *= 0.9 + vSpeed * 1.5; // fast particles run hot
+    gl_FragColor = vec4(col, alpha * 0.9);
+  }
+`;
+
+function NameParticles() {
+  const points = useRef<THREE.Points>(null);
+  const material = useRef<THREE.ShaderMaterial>(null);
+  const burst = useRef(0);
+  const moved = useRef(false); // no repel hole until the pointer really moves
+  const { viewport } = useThree();
+
+  const count =
+    typeof window !== "undefined" && window.innerWidth < 768 ? 9000 : 22000;
+
+  const sim = useMemo(() => {
+    const pos = new Float32Array(count * 3);
+    const vel = new Float32Array(count * 3);
+    const speed = new Float32Array(count);
+    // intro: a loose shell that condenses into the name
+    for (let i = 0; i < count; i++) {
+      const r = 5.5 + Math.random() * 3.5;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      pos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      pos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+      pos[i * 3 + 2] = r * Math.cos(phi) * 0.5;
+    }
+    return { pos, vel, speed, targets: null as Float32Array | null };
+  }, [count]);
+
+  useEffect(() => {
+    let alive = true;
+    document.fonts
+      .load("600 250px Fraunces")
+      .catch(() => undefined)
+      .then(() => {
+        if (alive) sim.targets = sampleName(count);
+      });
+    const down = () => (burst.current = 1);
+    const firstMove = () => (moved.current = true);
+    window.addEventListener("pointerdown", down);
+    window.addEventListener("pointermove", firstMove, { once: true });
+    return () => {
+      alive = false;
+      window.removeEventListener("pointerdown", down);
+      window.removeEventListener("pointermove", firstMove);
+    };
+  }, [sim, count]);
+
+  const uniforms = useMemo(
+    () => ({
+      uScale: { value: 450 },
+      uSize: { value: 0.055 },
+      uColA: { value: new THREE.Color("#c4677f") },
+      uColB: { value: new THREE.Color("#fff3ea") },
+    }),
+    [],
+  );
+
+  useFrame((state, delta) => {
+    const { pos, vel, speed, targets } = sim;
+    const T = state.clock.elapsedTime;
+
+    // fit the name to the visible stage
+    const s = Math.min(1, (state.viewport.width * 0.88) / NAME_W);
+    points.current?.scale.setScalar(s);
+    const mx = moved.current
+      ? (state.pointer.x * state.viewport.width) / 2 / s
+      : 9999;
+    const my = moved.current
+      ? (state.pointer.y * state.viewport.height) / 2 / s
+      : 9999;
+
+    const R = 1.5;
+    const R2 = R * R;
+    let kick = burst.current;
+    burst.current = 0;
+
+    // substep so the sim is framerate-independent: throttled tabs and
+    // low-end devices integrate the same trajectory, just chunked
+    let rem = Math.min(delta, 0.5);
+    while (rem > 1e-4) {
+      const dt = Math.min(rem, 1 / 60);
+      rem -= dt;
+      const damp = Math.exp(-4.6 * dt);
+      const spring = 3.4 * dt;
+
+      for (let i = 0; i < count; i++) {
+        const i3 = i * 3;
+        const px = pos[i3];
+        const py = pos[i3 + 1];
+        const pz = pos[i3 + 2];
+
+        if (targets) {
+          vel[i3] += (targets[i3] - px) * spring;
+          vel[i3 + 1] += (targets[i3 + 1] - py) * spring;
+          vel[i3 + 2] += (targets[i3 + 2] - pz) * spring;
+        }
+
+        // gentle breath
+        vel[i3] += Math.sin(py * 1.9 + T * 1.1) * 0.22 * dt;
+        vel[i3 + 1] += Math.cos(px * 1.5 - T * 0.9) * 0.2 * dt;
+
+        // pointer: radial blast + swirl
+        const dx = px - mx;
+        const dy = py - my;
+        const d2 = dx * dx + dy * dy + pz * pz * 0.3;
+        if (d2 < R2) {
+          const d = Math.sqrt(d2) + 1e-4;
+          const f = (1 - d2 / R2) * (1 - d2 / R2);
+          const radial = (f * 3.6 + kick * f * 10.0) * dt * 60 * 0.016;
+          vel[i3] += (dx / d) * radial + (-dy / d) * f * 1.1 * dt;
+          vel[i3 + 1] += (dy / d) * radial + (dx / d) * f * 1.1 * dt;
+          vel[i3 + 2] += (pz / d) * radial * 0.5;
+        }
+
+        vel[i3] *= damp;
+        vel[i3 + 1] *= damp;
+        vel[i3 + 2] *= damp;
+
+        pos[i3] += vel[i3] * dt * 0.96;
+        pos[i3 + 1] += vel[i3 + 1] * dt * 0.96;
+        pos[i3 + 2] += vel[i3 + 2] * dt * 0.96;
+
+        const sp = Math.min(
+          1,
+          (Math.abs(vel[i3]) + Math.abs(vel[i3 + 1])) * 0.5,
+        );
+        speed[i] += (sp - speed[i]) * Math.min(1, dt * 8);
+      }
+      kick = 0; // the click impulse fires on the first substep only
+    }
+
+    const geo = points.current?.geometry;
+    if (geo) {
+      geo.attributes.position.needsUpdate = true;
+      geo.attributes.aSpeed.needsUpdate = true;
+    }
+    if (material.current) {
+      material.current.uniforms.uScale.value =
+        (state.size.height * state.viewport.dpr) / 2;
+    }
+  });
+
+  return (
+    <points ref={points} position={[0, 0.2, 0]}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" args={[sim.pos, 3]} />
+        <bufferAttribute attach="attributes-aSpeed" args={[sim.speed, 1]} />
+      </bufferGeometry>
+      <shaderMaterial
+        ref={material}
+        uniforms={uniforms}
+        vertexShader={nameVert}
+        fragmentShader={nameFrag}
+        transparent
+        depthWrite={false}
+        blending={THREE.AdditiveBlending}
+      />
+    </points>
+  );
+}
+
 export function StrokesScene({ active = true }: { active?: boolean }) {
   const burst = useRef<BurstRef>({ t: -100, now: 0, x: 0, y: 0, bx: 0, by: 0 });
 
@@ -394,6 +623,7 @@ export function StrokesScene({ active = true }: { active?: boolean }) {
     >
       <Backdrop burst={burst} />
       <Strokes burst={burst} />
+      <NameParticles />
       <Rig />
     </Canvas>
   );

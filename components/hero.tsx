@@ -23,9 +23,17 @@ export function Hero() {
         {reduced ? <StaticGlow /> : <StrokesScene active />}
       </div>
 
+      {/* the name itself is drawn in particles inside the WebGL scene;
+          keep a real heading for SEO/screen readers */}
+      {!reduced && <h1 className="sr-only">Thưởng</h1>}
+
       <div className="hero-copy pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-5 px-6">
-        <NameTitle />
-        <p className="sub-in font-mono text-xs text-[#f5f0ea]/58 md:text-sm">
+        {reduced && <NameTitle />}
+        <p
+          className={`sub-in font-mono text-xs text-[#f5f0ea]/58 md:text-sm ${
+            reduced ? "" : "mt-[40vh]"
+          }`}
+        >
           /tʰɨəŋ/ — means &ldquo;reward&rdquo;
         </p>
       </div>
