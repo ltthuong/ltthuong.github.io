@@ -131,19 +131,24 @@ body {
   overflow: hidden;
   /* generous headroom for stacked diacritics (Ở); JS lifts the mask
      entirely once the reveal is done, so clipping can never persist */
-  padding: 0.5em 0.06em 0.14em;
-  margin: -0.5em -0.06em -0.14em;
+  padding: 0.6em 0.08em 0.18em;
+  margin: -0.6em -0.08em -0.18em;
   will-change: transform;
 }
 
 .solid-char {
   display: inline-block;
+  /* the paint box must cover ALL glyph ink — stacked diacritics rise ~1.2em
+     above the baseline, far past the 1em line box. background-clip: text
+     renders nothing where the background doesn't reach. */
+  padding: 0.55em 0.1em 0.2em;
+  margin: -0.55em -0.1em -0.2em;
   background: linear-gradient(
     180deg,
-    #fffaf4 0%,
-    #f6d8de 42%,
-    #e38399 72%,
-    #a93c58 100%
+    #fffaf4 34%,
+    #f6d8de 52%,
+    #e38399 64%,
+    #a93c58 76%
   );
   -webkit-background-clip: text;
   background-clip: text;
