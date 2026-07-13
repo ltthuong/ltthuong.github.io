@@ -129,9 +129,10 @@ body {
 .solid-mask {
   display: inline-block;
   overflow: hidden;
-  /* headroom so Vietnamese stacked diacritics (Ở) never get clipped */
-  padding: 0.34em 0.02em 0.08em;
-  margin: -0.34em -0.02em -0.08em;
+  /* generous headroom for stacked diacritics (Ở); JS lifts the mask
+     entirely once the reveal is done, so clipping can never persist */
+  padding: 0.5em 0.06em 0.14em;
+  margin: -0.5em -0.06em -0.14em;
   will-change: transform;
 }
 
@@ -182,6 +183,9 @@ body.custom-cursor * {
   .solid-char,
   .sub-in {
     animation: none;
+  }
+  .solid-mask {
+    overflow: visible;
   }
   html {
     scroll-behavior: auto;

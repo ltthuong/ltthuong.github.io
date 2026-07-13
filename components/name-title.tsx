@@ -32,6 +32,10 @@ export function NameTitle() {
       });
     };
     const measureTimer = setTimeout(measure, 1300); // after reveal settles
+    // the mask's only job is the rise-in; lift it so nothing ever clips
+    const unmaskTimer = setTimeout(() => {
+      for (const m of masks) m.style.overflow = "visible";
+    }, 1600);
     window.addEventListener("resize", measure);
 
     let mx = -9999, my = -9999;
@@ -94,6 +98,7 @@ export function NameTitle() {
     raf = requestAnimationFrame(tick);
     return () => {
       clearTimeout(measureTimer);
+      clearTimeout(unmaskTimer);
       window.removeEventListener("resize", measure);
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerdown", down);
