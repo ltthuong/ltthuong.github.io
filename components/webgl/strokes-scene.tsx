@@ -202,6 +202,7 @@ const fogFrag = /* glsl */ `
   varying vec2 vUv;
   uniform float uTime;
   uniform float uBurstT;
+  uniform float uPeak;
 
   float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
   float noise(vec2 p) {
@@ -244,6 +245,10 @@ const fogFrag = /* glsl */ `
     float bt = uTime - uBurstT;
     col += vec3(0.30, 0.03, 0.09) * exp(-bt * 3.2) * step(0.0, bt);
 
+    // peaking: the room swells gold, slow enough to never read as a flash
+    float p = smoothstep(0.5, 0.85, uPeak);
+    col = mix(col, vec3(0.85, 0.64, 0.26), p * 0.35);
+
     gl_FragColor = vec4(col, 1.0);
   }
 `;
@@ -256,17 +261,24 @@ const fogVert = /* glsl */ `
   }
 `;
 
-function Backdrop({ burst }: { burst: React.MutableRefObject<BurstRef> }) {
+function Backdrop({
+  burst,
+  flash,
+}: {
+  burst: React.MutableRefObject<BurstRef>;
+  flash: React.MutableRefObject<FlashRef>;
+}) {
   const mat = useRef<THREE.ShaderMaterial>(null);
   const { viewport } = useThree();
   const uniforms = useMemo(
-    () => ({ uTime: { value: 0 }, uBurstT: { value: -100 } }),
+    () => ({ uTime: { value: 0 }, uBurstT: { value: -100 }, uPeak: { value: 0 } }),
     [],
   );
   useFrame((state) => {
     if (!mat.current) return;
     mat.current.uniforms.uTime.value = state.clock.elapsedTime;
     mat.current.uniforms.uBurstT.value = burst.current.t;
+    mat.current.uniforms.uPeak.value = flash.current.peak;
   });
   // plane far behind, scaled to overfill the frustum
   const dist = 10 + 8; // camera z − plane z
@@ -284,6 +296,10 @@ function Backdrop({ burst }: { burst: React.MutableRefObject<BurstRef> }) {
       />
     </mesh>
   );
+}
+
+interface FlashRef {
+  peak: number; // 0..1 damped peaking intensity, drives the gold swell
 }
 
 interface BurstRef {
@@ -425,6 +441,8 @@ const velSim = /* glsl */ `
   uniform float uAssemble;
   uniform float uKick;
   uniform vec2 uPointer;
+  uniform vec2 uPointerVel; // world units/s the cursor is whipping
+  uniform float uSpeed;     // 0..1 flail intensity (staggeringbeauty)
   uniform sampler2D textureTargets;
 
   void main() {
@@ -451,9 +469,33 @@ const velSim = /* glsl */ `
       float radial = (f * 3.6 + uKick * f * 10.0) * uDt;
       vel.xy += (dp / d) * radial + vec2(-dp.y, dp.x) / d * f * 1.1 * uDt;
       vel.z += (pos.z / d) * radial * 0.5;
+      // drag the letters along the whip
+      vel.xy += uPointerVel * f * uSpeed * 2.2 * uDt;
     }
 
-    vel *= exp(-4.6 * uDt);
+    // staggeringbeauty flail: vung chuột mạnh = cả tên quằn quại,
+    // springs (uAssemble) kéo lại nên nó "stagger" rồi tự lành.
+    // Mỗi hạt có phase/freq/hướng riêng (hash từ texel uv) nên các
+    // mảnh thrash độc lập thay vì trôi thành một dải đồng bộ.
+    if (uSpeed > 0.001) {
+      float r1 = fract(sin(dot(uv, vec2(127.1, 311.7))) * 43758.5453);
+      float r2 = fract(sin(dot(uv, vec2(269.5, 183.3))) * 43758.5453);
+      float ph = r1 * 6.2831;
+      float n = sin(pos.y * 6.1 + uTime * (22.0 + r2 * 46.0) + ph)
+              * cos(pos.x * 4.7 - uTime * (17.0 + r1 * 40.0) + ph * 1.7);
+      vec2 shear = vec2(-uPointerVel.y, uPointerVel.x); // whip perpendicular
+      vec2 sdir = shear / (length(shear) + 1e-3);
+      vec2 dir = normalize(sdir + vec2(cos(ph), sin(ph)) * 1.6); // wide scatter
+      float amp = uSpeed * (0.4 + r1 * 1.3) * (length(uPointerVel) + 3.0) * 2.0;
+      vel.xy += dir * n * amp * uDt;
+      // random outward kicks so some shards fling clear of the pack
+      vel.xy += vec2(cos(ph), sin(ph)) * (r2 - 0.4) * uSpeed * 6.0 * uDt;
+      vel.z  += (n + r2 - 0.5) * uSpeed * 6.0 * uDt;
+    }
+
+    // peaking drops the drag (their 0.8 → 0.2): once wild, it stays wild longer
+    float damp = mix(4.6, 1.9, clamp(uSpeed, 0.0, 1.0));
+    vel *= exp(-damp * uDt);
     gl_FragColor = vec4(vel, 1.0);
   }
 `;
@@ -488,13 +530,18 @@ const nameVert = /* glsl */ `
 const nameFrag = /* glsl */ `
   uniform vec3 uColA;
   uniform vec3 uColB;
+  uniform float uPeak;
+  uniform float uTime;
   varying float vSpeed;
   void main() {
     float d = length(gl_PointCoord - 0.5);
     float alpha = smoothstep(0.5, 0.18, d);
     vec3 col = mix(uColA, uColB, clamp(vSpeed, 0.0, 1.0));
-    col *= 0.85 + vSpeed * 0.9; // fast particles run hot (tamed for 792k additive)
-    gl_FragColor = vec4(col, alpha * 0.13);
+    col *= 1.0 + vSpeed * 0.9; // fast particles run hot (tamed for 792k additive)
+    // peaking: the name warms to pale gold with the room
+    float p = smoothstep(0.5, 0.85, uPeak);
+    col = mix(col, vec3(0.95, 0.85, 0.6), p * 0.5);
+    gl_FragColor = vec4(col, alpha * 0.17 * (1.0 + p * 1.4));
   }
 `;
 
@@ -503,12 +550,15 @@ function smooth01(x: number) {
   return t * t * (3 - 2 * t);
 }
 
-function NameParticles() {
+function NameParticles({ flash }: { flash: React.MutableRefObject<FlashRef> }) {
   const points = useRef<THREE.Points>(null);
   const material = useRef<THREE.ShaderMaterial>(null);
   const burst = useRef(0);
   const moved = useRef(false); // no repel hole until the pointer really moves
   const born = useRef(-1);
+  const prevP = useRef(new THREE.Vector2(9999, 9999)); // last pointer (name space)
+  const velVec = useRef(new THREE.Vector2()); // pointer velocity, world u/s
+  const whip = useRef(0); // 0..1 flail intensity, fast attack / slow release
   const targetsReady = useRef(false);
   const { gl } = useThree();
 
@@ -547,6 +597,8 @@ function NameParticles() {
     velVar.material.uniforms.uPointer = {
       value: new THREE.Vector2(9999, 9999),
     };
+    velVar.material.uniforms.uPointerVel = { value: new THREE.Vector2() };
+    velVar.material.uniforms.uSpeed = { value: 0 };
     velVar.material.uniforms.textureTargets = { value: null };
     posVar.material.uniforms.uDt = { value: 0 };
     const err = g.init();
@@ -601,6 +653,8 @@ function NameParticles() {
       uSize: { value: 0.02 },
       uColA: { value: new THREE.Color("#c4677f") },
       uColB: { value: new THREE.Color("#fff3ea") },
+      uPeak: { value: 0 },
+      uTime: { value: 0 },
     }),
     [],
   );
@@ -616,10 +670,29 @@ function NameParticles() {
 
     const u = gpu.velVar.material.uniforms;
     u.uTime.value = T;
-    (u.uPointer.value as THREE.Vector2).set(
-      moved.current ? (state.pointer.x * state.viewport.width) / 2 / s : 9999,
-      moved.current ? (state.pointer.y * state.viewport.height) / 2 / s : 9999,
-    );
+    const px = moved.current ? (state.pointer.x * state.viewport.width) / 2 / s : 9999;
+    const py = moved.current ? (state.pointer.y * state.viewport.height) / 2 / s : 9999;
+    (u.uPointer.value as THREE.Vector2).set(px, py);
+
+    // pointer velocity → whip intensity (fast attack, slow release so it staggers)
+    let speed = 0;
+    if (moved.current && prevP.current.x < 9000) {
+      const idt = 1 / Math.max(delta, 1e-3);
+      velVec.current.set((px - prevP.current.x) * idt, (py - prevP.current.y) * idt);
+      if (velVec.current.length() > 30) velVec.current.setLength(30); // clamp
+      speed = velVec.current.length();
+    }
+    prevP.current.set(px, py);
+    // Staggering-Beauty stress: builds only under sustained fast motion and
+    // bleeds off slowly (their `stress += (target-stress)*0.03`). Below the
+    // threshold it stays dead calm — "shake vigorously" — then peaks hard.
+    const stressIn = Math.min(1, speed / 18);
+    whip.current += (stressIn - whip.current) * 0.07;
+    const peak = smooth01((whip.current - 0.4) / 0.35); // 0 until it "peaks"
+    (u.uPointerVel.value as THREE.Vector2).copy(velVec.current);
+    u.uSpeed.value = peak;
+    // luminance follows a slow damp so shaking can never flash > 3 Hz (WCAG 2.3.1)
+    flash.current.peak = THREE.MathUtils.damp(flash.current.peak, peak, 2.5, delta);
     // pure explosion for the first beat, then the springs take over
     u.uAssemble.value = targetsReady.current
       ? smooth01((tAlive - 0.75) / 1.1)
@@ -646,6 +719,8 @@ function NameParticles() {
       m.uPosTex.value = gpu.g.getCurrentRenderTarget(gpu.posVar).texture;
       m.uVelTex.value = gpu.g.getCurrentRenderTarget(gpu.velVar).texture;
       m.uScale.value = (state.size.height * state.viewport.dpr) / 2;
+      m.uPeak.value = flash.current.peak;
+      m.uTime.value = T;
     }
   });
 
@@ -669,6 +744,7 @@ function NameParticles() {
 
 export function StrokesScene({ active = true }: { active?: boolean }) {
   const burst = useRef<BurstRef>({ t: -100, now: 0, x: 0, y: 0, bx: 0, by: 0 });
+  const flash = useRef<FlashRef>({ peak: 0 }); // peaking swell, shared name→room
 
   useEffect(() => {
     const down = () => {
@@ -692,9 +768,9 @@ export function StrokesScene({ active = true }: { active?: boolean }) {
       }}
       frameloop={active ? "always" : "never"}
     >
-      <Backdrop burst={burst} />
+      <Backdrop burst={burst} flash={flash} />
       <Strokes burst={burst} />
-      <NameParticles />
+      <NameParticles flash={flash} />
       <Rig />
     </Canvas>
   );

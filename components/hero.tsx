@@ -38,6 +38,28 @@ export function Hero() {
         </p>
       </div>
 
+      <nav
+        aria-label="Social links"
+        className="social-nav pointer-events-auto absolute bottom-7 left-1/2 flex -translate-x-1/2 gap-7 font-mono text-xs text-[#f5f0ea]/55"
+      >
+        <a
+          href="https://www.linkedin.com/in/letienthuong"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="social-link transition-colors hover:text-[#f5f0ea]"
+        >
+          LinkedIn
+        </a>
+        <a
+          href="https://github.com/ltthuong"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="social-link transition-colors hover:text-[#f5f0ea]"
+        >
+          GitHub
+        </a>
+      </nav>
+
       <Cursor />
     </section>
   );
