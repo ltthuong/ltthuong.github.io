@@ -17,10 +17,14 @@ export function Cursor() {
     const r = ring.current!;
     let x = innerWidth / 2, y = innerHeight / 2;
     let dx = x, dy = y, rx = x, ry = y;
-    let scale = 1, target = 1;
+    let scale = 1, target = 1, hover = 1;
     let raf = 0;
 
-    const move = (e: PointerEvent) => { x = e.clientX; y = e.clientY; };
+    const move = (e: PointerEvent) => {
+      x = e.clientX;
+      y = e.clientY;
+      hover = e.target instanceof Element && e.target.closest("a, button") ? 1.7 : 1;
+    };
     const down = () => (target = 0.72);
     const up = () => (target = 1);
 
@@ -29,7 +33,7 @@ export function Cursor() {
       dy += (y - dy) * 0.5;
       rx += (x - rx) * 0.14;
       ry += (y - ry) * 0.14;
-      scale += (target - scale) * 0.2;
+      scale += (target * hover - scale) * 0.2;
       // the ring stretches along its lag vector, like a droplet in motion
       const lx = x - rx;
       const ly = y - ry;
@@ -57,7 +61,7 @@ export function Cursor() {
   }, []);
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-[80] hidden [@media(pointer:fine)]:block" aria-hidden>
+    <div className="pointer-events-none fixed inset-0 z-[80] hidden [@media(pointer:fine)_and_(prefers-reduced-motion:no-preference)]:block" aria-hidden>
       <div
         ref={dot}
         className="absolute left-0 top-0 h-2 w-2 rounded-full bg-white mix-blend-difference"
